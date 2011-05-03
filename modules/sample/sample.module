@@ -20,21 +20,31 @@ function sample_entity_info() {
         'label' => 'mech_name', // the property that contains the name for each instance of this entity
         'id' => 'sid', // the property that uniquely identifies this entity (must be numeric)
         'revision' => 'rev_id', // if the entity keeps revisions, the property identifying the revision id
-        //'bundle' => 'type', // if the entity has multiple bundles, the property that identifies the bundle, type is the bundle for the node entity as an example
+        'bundle' => 'type', // if the entity has multiple bundles, the property that identifies the bundle, type is the bundle for the node entity as an example
       ),
       /* if the paths defined in the bundle section contain wildcards indicating a loadable object this indicates the property
-         of the bundle necessary to construct the real path
+         of the bundle necessary to construct the real path      */
       'bundle keys' => array(
         'bundle' => 'type',
       ),
-      */
+      //See also: http://api.drupal.org/api/drupal/modules--system--system.api.php/function/hook_entity_info/7 - scroll down to the code for more info on multiple bundles
       'bundles' => array( // if you have only one bundle, then key it based on your entity key
-        'sample' => array(
-          'label' => t('Default Bundle'), // human readable name
+        'bundle1' => array(
+          'label' => t('First Bundle'), // human readable name
           'admin' => array(
-            'path' => 'admin/structure/sample', // a path you'll define in hook menu later for the admin page of this bundle, this is where the manage fields tabs will get tacked on if this is a fieldable entity
-            //'real path' => 'admin/structure/sample/sample', // if path were admin/structure/sample/%sample_type then this would be required and the second sample would represent the bundle key, this is useful for entities which allow dynamic bundle creation
-            //'bundle argument' => 3, // if real path is used, point at the arg which represents the bundle
+            'path' => 'admin/structure/sample/%sample_type', // a path you'll define in hook menu later for the admin page of this bundle, this is where the manage fields tabs will get tacked on if this is a fieldable entity
+            'real path' => 'admin/structure/sample/bundle1', // if path were admin/structure/sample/%sample_type then this would be required and the second sample would represent the bundle key, this is useful for entities which allow dynamic bundle creation
+            'bundle argument' => 3, // if real path is used, point at the arg which represents the bundle
+            //'access callback' => 'user_access', // user access is the default
+            'access arguments' => array('administer site configuration'), // probably best to define an explicit permission for controlling the structure of this entity, for node this is 'administer content types'
+          ),
+        ),
+        'bundle2' => array(
+          'label' => t('Second Bundle'), // human readable name
+          'admin' => array(
+            'path' => 'admin/structure/sample/%sample_type', // a path you'll define in hook menu later for the admin page of this bundle, this is where the manage fields tabs will get tacked on if this is a fieldable entity
+            'real path' => 'admin/structure/sample/bundle2', // if path were admin/structure/sample/%sample_type then this would be required and the second sample would represent the bundle key, this is useful for entities which allow dynamic bundle creation
+            'bundle argument' => 3, // if real path is used, point at the arg which represents the bundle
             //'access callback' => 'user_access', // user access is the default
             'access arguments' => array('administer site configuration'), // probably best to define an explicit permission for controlling the structure of this entity, for node this is 'administer content types'
           ),
@@ -60,7 +70,7 @@ function sample_entity_info() {
  * TODO: need to determine what should be returned if the id doesn't exist
  */
 function sample_load($sample_id = NULL, $reset = FALSE) {
-  $ids = (isset($sample_id) ? array($sample_id) : array());
+  $ids = (isset($sample_id) ? array($sample_id) : FALSE);
   $samples = sample_load_multiple($ids, NULL, $reset);
   return $samples[$sample_id];
 }
@@ -69,7 +79,8 @@ function sample_load($sample_id = NULL, $reset = FALSE) {
  * define a function for loading multiple entities at once so entity_load can be leveraged
  */
 function sample_load_multiple($ids = array(), $conditions = array(), $reset = FALSE) {
-  return entity_load('sample', $ids, $conditions, $reset);
+  $loaded = entity_load('sample');
+  return $loaded;
 }
 
 /**
@@ -85,8 +96,8 @@ function sample_uri($sample_entity_instance) {
  */
 function sample_menu() {
   return array(
-    // the admin path for the entity, must match with the path for one of your bundles
-    'admin/structure/sample' => array(
+    // the admin path for the entity, must match with the path for one of your bundles //CHANGED
+    'admin/structure/sample/%sample_type' => array(
       'title' => 'Administer Sample Structure',
       'description' => 'Adjust the structure of the sample entity, add fields, etc. Similar to manage content types for nodes',
       'page callback' => 'sample_admin',
@@ -133,6 +144,7 @@ function sample_menu() {
  * administration page for this entity (or a specific bundle if your entity supports them)
  */
 function sample_admin() {
+  
   return t('Sample Admin Page');
 }
 
@@ -168,6 +180,7 @@ function sample_default() {
   $sample->sid = NULL;
   $sample->mech_name = NULL;
   $sample->message = NULL;
+  $sample->type = 'bundle1';
   return $sample;
 }
 
@@ -177,8 +190,8 @@ function sample_default() {
 function sample_view($sample) {
   $view_mode = 'full';
   $type = 'sample';
-  $bundle = 'sample';
   $display = 'default';
+  
 
   // add additional view data for fields and entities that isn't normally pulled on a load
   field_attach_prepare_view($type, array($sample->sid => $sample), $view_mode);
@@ -188,6 +201,7 @@ function sample_view($sample) {
     'mech_name' => array('#markup' => $sample->mech_name, '#prefix' => '<div>', '#suffix' => '</div>'),
     'message' => array('#markup' => $sample->message, '#prefix' => '<div>', '#suffix' => '</div>'),
   );
+  $bundle = $sample->type;
 
   // honor custom settings for positioning on extra fields, this entire section
   // can be dropped if this entity does not allow extra settings
@@ -196,7 +210,7 @@ function sample_view($sample) {
     $display = $view_mode;
   }
   $bundle_settings = variable_get('field_bundle_settings', array());
-  // if no custom settings have been sved for this entity, load default info and build a structure
+  // if no custom settings have been saved for this entity, load default info and build a structure
   // in the form of the field_bundle_settings variable
   if (!isset($bundle_settings) || !isset($bundle_settings[$type]) || !isset($bundle_settings[$type][$bundle])) {
     $bundle_settings = field_info_extra_fields($type, $bundle, 'display');
@@ -206,6 +220,7 @@ function sample_view($sample) {
     }
     $bundle_settings = $tmp;
   }
+  
   // pull the bundle settings and apply to each extra field in our build array
   $extra_field_settings = $bundle_settings[$type][$bundle]['extra_fields']['display'];
   foreach ($extra_field_settings as $key => $settings) {
@@ -285,8 +300,23 @@ function sample_form($form, &$form_state, $sample) {
     '#max_length' => 50,
     '#default_value' => $sample->message,
   );
-
+  
   field_attach_form('sample', $sample, $form, $form_state);
+  
+  //create an array of bundles
+  $arr = array();
+  $bundles = field_info_bundles('sample');
+  foreach($bundles as $key => $value){
+    $arr[$key] = $value['label'];
+  }
+  $form['type'] = array(
+    '#type' => 'select',
+    '#options' => $arr,
+    '#title' => t('Type'),
+    '#description' => t('The type of Sample Entity you want to add'),
+    '#default_value' => $sample->type
+  );
+
   $form['submit'] = array(
     '#type' => 'submit',
     '#default_value' => t('Save'),
@@ -320,7 +350,9 @@ function sample_form_submit($form, &$form_state) {
 
   $sample->mech_name = $form_state['values']['mech_name'];
   $sample->message = $form_state['values']['message'];
-
+  //ADDED
+  $sample->type = $form_state['values']['type'];
+  
   field_attach_submit('sample', $sample, $form, $form_state);
   // automatically revision every save
   if ($update) {
@@ -360,7 +392,8 @@ function sample_permission() {
  * hook field extra fields, let the data items of this entity be managed and ordered as though they were fields
  */
 function sample_field_extra_fields() {
-  $return['sample']['sample']['form'] = array(
+  //ADDED - added correct indexes for bundles
+  $return['sample']['bundle1']['form'] = array(
     'mech_name' => array(
       'label' => t('Machine Name'),
       'description' => t('Machine Name'),
@@ -372,6 +405,19 @@ function sample_field_extra_fields() {
       'weight' => -10,
     ),
   );
-  $return['sample']['sample']['display'] = $return['sample']['sample']['form'];
+  $return['sample']['bundle2']['form'] = array(
+    'mech_name' => array(
+      'label' => t('Machine Name'),
+      'description' => t('Machine Name'),
+      'weight' => -20,
+    ),
+    'message' => array(
+      'label' => t('Message'),
+      'description' => t('Message'),
+      'weight' => -10,
+    ),
+  );
+  $return['sample']['bundle1']['display'] = $return['sample']['bundle1']['form'];
+  $return['sample']['bundle2']['display'] = $return['sample']['bundle2']['form'];
   return $return;
 }

@@ -29,6 +29,12 @@ function sample_schema() {
         'not null' => TRUE,
         'description' => 'Custom data stored by module',
       ),
+      'type' => array(
+      'type' => 'varchar',
+        'length' => 100,
+        'not null' => TRUE,
+        'description' => 'Bundle for the entity',
+      )
     ),
     'primary key' => array('sid'),
   );
